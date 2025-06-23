@@ -151,3 +151,4 @@ We welcome contributions for new features, bug fixes, documentation, and more!
 ## 🙏 Acknowledgements
 - Inspired by modern LMS platforms
 - Built with ❤️ by Sai Vignesh and Faang Tech Lab
+"# FaangLMS"  
