@@ -14,14 +14,8 @@ export default function MainPage() {
           </div>
           <div className="flex space-x-3 items-center">
             <Link
-              to="/admin/login"
-              className="px-3 py-1.5 text-indigo-600 hover:text-indigo-700 font-medium text-sm"
-            >
-              Admin Login
-            </Link>
-            <Link
               to="/student/login"
-              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
+              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:text-indigo-600 hover:bg-white font-medium text-sm"
             >
               Student Login
             </Link>
@@ -52,7 +46,7 @@ export default function MainPage() {
               { icon: <BookOpen className="w-5 h-5 text-purple-600" />, label: "Expert Content", bg: "bg-purple-100" },
               { icon: <ArrowRight className="w-5 h-5 text-green-600" />, label: "Career Ready", bg: "bg-green-100" }
             ].map(({ icon, label, bg }, i) => (
-              <div key={i} className="bg-white p-3 rounded-xl shadow-sm flex items-center space-x-2 hover:shadow-md transition-shadow">
+              <div key={i} className="bg-white p-3 rounded-xl shadow-sm flex items-center space-x-2 ">
                 <div className={`p-2 rounded-lg ${bg}`}>{icon}</div>
                 <span className="text-sm font-medium text-gray-900">{label}</span>
               </div>
@@ -64,14 +58,8 @@ export default function MainPage() {
               to="/student/login"
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm flex items-center space-x-1"
             >
-              <span>Get Started</span>
+              <span>Student Portal</span>
               <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              to="/admin/login"
-              className="px-4 py-2 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 text-sm"
-            >
-              Admin Portal
             </Link>
           </div>
         </div>
