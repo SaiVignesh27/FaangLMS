@@ -62,6 +62,15 @@ interface CodeEditorProps {
     cpp?: string;
     javascript?: string;
   };
+  initialOutput?: string;
+  initialTestResults?: Array<{
+    input: string;
+    output: string;
+    actualOutput: string;
+    passed: boolean;
+    error?: string;
+  }>;
+  initialScore?: number;
   onAnswerChange?: (answer: {
     code?: string;
     output?: string;
@@ -115,6 +124,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   templateType,
   testCases = [],
   validationProgram,
+  initialOutput = '',
+  initialTestResults = [],
+  initialScore = 0,
   onAnswerChange
 }) => {
   const [code, setCode] = useState(initialCode);
@@ -122,22 +134,21 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const [isExecuting, setIsExecuting] = useState(false);
   const [result, setResult] = useState<CodeExecutionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [output, setOutput] = useState('');
-  const [testResults, setTestResults] = useState<Array<{
-    input: string;
-    output: string;
-    actualOutput: string;
-    passed: boolean;
-    error?: string;
-  }>>([]);
-  const [score, setScore] = useState(0);
+  const [output, setOutput] = useState(initialOutput);
+  const [testResults, setTestResults] = useState(initialTestResults);
+  const [score, setScore] = useState(initialScore);
   const [isRunning, setIsRunning] = useState(false);
   const [executionTime, setExecutionTime] = useState(0);
 
-  // Update code when language changes
+  // Update code, output, testResults, score when question changes
   useEffect(() => {
     setCode(initialCode);
   }, [selectedLanguage, initialCode]);
+  useEffect(() => {
+    setOutput(initialOutput);
+    setTestResults(initialTestResults);
+    setScore(initialScore);
+  }, [initialOutput, initialTestResults, initialScore]);
 
   const handleRunCode = async () => {
     if (!code) {

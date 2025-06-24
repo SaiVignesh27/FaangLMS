@@ -23,6 +23,7 @@ export default function TestView() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentSection, setCurrentSection] = useState(1);
+  const [currentCodeIndex, setCurrentCodeIndex] = useState(0);
   const [isTestSubmitted, setIsTestSubmitted] = useState(false);
   const [validationError, setValidationError] = useState('');
   const queryClient = useQueryClient();
@@ -30,6 +31,10 @@ export default function TestView() {
   const { data: resultData } = useQuery<{ result: Result }>({ queryKey: [`/api/student/tests/${id}/results`], retry: false });
   const [isFullScreen, setIsFullScreen] = useState(!!document.fullscreenElement);
   const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(Date.now());
+  const [navAnimation, setNavAnimation] = useState('');
+  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Handler for updating answers from CodeEditor
   const handleCodeAnswerChange = (questionIdentifier: string, answer: { code?: string; output?: string; testResults?: any[]; score?: number }) => {
@@ -284,13 +289,11 @@ export default function TestView() {
       __originalIndex: index,
     }));
     // Then filter by section
-    return numberedQuestions.filter(question => {
-      if (currentSection === 1) {
-        return question.type !== 'code';
-      } else {
-        return question.type === 'code';
-      }
-    });
+    if (currentSection === 1) {
+      return numberedQuestions.filter(question => question.type !== 'code');
+    } else {
+      return numberedQuestions.filter(question => question.type === 'code');
+    }
   };
 
   const renderQuestion = (question: any, index: number) => {
@@ -353,13 +356,13 @@ export default function TestView() {
                 </h3>
                 <div className="whitespace-pre-wrap text-gray-700">{question.text}</div>
               </div>
-              {question.description && (
+              {((question as any)?.description) && (
                 <div className="bg-white p-6 rounded-xl border border-blue-100 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.01]">
                   <h3 className="font-semibold mb-3 text-blue-700 flex items-center gap-2">
                     <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
                     Description
                   </h3>
-                  <div className="whitespace-pre-wrap text-gray-700">{question.description}</div>
+                  <div className="whitespace-pre-wrap text-gray-700">{((question as any)?.description) || ''}</div>
                 </div>
               )}
             </div>
@@ -377,10 +380,10 @@ export default function TestView() {
                   }
                   return question.codeTemplate || '';
                 })()}
-                language={question.language || 'java'}
+                language={(question as any)?.language || 'java'}
                 readOnly={false}
-                question={question}
-                description={question.description}
+                question={question.text}
+                description={(question as any)?.description || ''}
                 testId={id}
                 questionId={answerKey}
                 onAnswerChange={(answer) => handleCodeAnswerChange(answerKey, answer)}
@@ -390,6 +393,28 @@ export default function TestView() {
         );
     }
   };
+
+  // Debounced auto-save effect for Section 2
+  useEffect(() => {
+    if (currentSection !== 2) return;
+    setIsSaving(true);
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    saveTimeout.current = setTimeout(() => {
+      setIsSaving(false);
+      setLastSaved(Date.now());
+    }, 700);
+    return () => {
+      if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    };
+  }, [answers, currentSection]);
+
+  // Animation on code question navigation
+  useEffect(() => {
+    if (currentSection !== 2) return;
+    setNavAnimation('nav-animate');
+    const timeout = setTimeout(() => setNavAnimation(''), 400);
+    return () => clearTimeout(timeout);
+  }, [currentCodeIndex, currentSection]);
 
   if (isLoading) return (
     <StudentLayout>
@@ -505,29 +530,158 @@ export default function TestView() {
         </div>
 
         <div className="mt-8 space-y-8">
-          {getSectionQuestions().map((question, idx) => {
-            const originalIndex = question.__originalIndex;
-            if (typeof originalIndex !== 'number') {
-              console.error('Question missing __originalIndex:', question);
-              return null;
-            }
-            // WARNING: Using array index as answer key is fragile! If questions are reordered, added, or removed, answer mapping will break.
-            return (
-              <Card key={originalIndex} className="mb-4 transition-all duration-300 hover:shadow-xl border-gray-200 animate-fadeIn">
-                <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
-                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                    <span className="w-8 h-8 flex items-center justify-center bg-blue-100 text-blue-700 rounded-full text-sm animate-bounce">
-                      {question.questionNumber}
-                    </span>
-                    Question {question.questionNumber}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-8">
-                  {renderQuestion(question, originalIndex)}
-                </CardContent>
-              </Card>
-            );
-          })}
+          {currentSection === 1 ? (
+            getSectionQuestions().map((question, idx) => {
+              const originalIndex = question.__originalIndex;
+              if (typeof originalIndex !== 'number') {
+                console.error('Question missing __originalIndex:', question);
+                return null;
+              }
+              return (
+                <Card key={originalIndex} className="mb-4 transition-all duration-300 hover:shadow-xl border-gray-200 animate-fadeIn">
+                  <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
+                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                      <span className="w-8 h-8 flex items-center justify-center bg-blue-100 text-blue-700 rounded-full text-sm animate-bounce">
+                        {question.questionNumber}
+                      </span>
+                      Question {question.questionNumber}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-8">
+                    {renderQuestion(question, originalIndex)}
+                  </CardContent>
+                </Card>
+              );
+            })
+          ) : (
+            (() => {
+              const codeQuestions = getSectionQuestions();
+              const question = codeQuestions[currentCodeIndex];
+              if (!question) return null;
+              const originalIndex = question.__originalIndex;
+              // Extract test case summary
+              let testCasesPassed = 0, testCasesTotal = 0;
+              const answerKey = `q${originalIndex}`;
+              const storedAnswer = answers[answerKey];
+              if (storedAnswer) {
+                try {
+                  const parsed = JSON.parse(storedAnswer);
+                  if (Array.isArray(parsed.testResults)) {
+                    testCasesPassed = parsed.testResults.filter((t: any) => t.passed).length;
+                    testCasesTotal = parsed.testResults.length;
+                  }
+                } catch {}
+              }
+              return (
+                <Card key={originalIndex} className={`mb-4 transition-all duration-300 hover:shadow-xl border-gray-200 rounded-xl bg-white ${navAnimation}`}>
+                  {/* Sticky nav & progress */}
+                  <CardHeader className="sticky top-0 z-20 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 rounded-t-xl p-6 flex flex-col md:flex-row justify-between items-center mb-2 gap-2" style={{minHeight:'64px'}}>
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 h-8 flex items-center justify-center bg-blue-100 text-blue-700 rounded-full text-sm animate-bounce">
+                        {question.questionNumber}
+                      </span>
+                      <span className="text-lg font-semibold">Question {currentCodeIndex + 1} of {codeQuestions.length}</span>
+                      {/* Test case summary badge */}
+                      {testCasesTotal > 0 && (
+                        <span className={`ml-3 px-3 py-1 rounded-full text-xs font-semibold ${testCasesPassed === testCasesTotal ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-800'}`}
+                          title="Test case results summary">
+                          {testCasesPassed}/{testCasesTotal} test cases passed
+                        </span>
+                      )}
+                      {/* Auto-save indicator */}
+                      <span className="ml-4 text-xs text-gray-400 flex items-center gap-1">
+                        {isSaving ? <span className="animate-pulse">Saving…</span> : <span>Saved</span>}
+                      </span>
+                    </div>
+                    <div className="flex gap-2 mt-2 md:mt-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentCodeIndex((idx) => Math.max(0, idx - 1))}
+                        disabled={currentCodeIndex === 0}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentCodeIndex((idx) => Math.min(codeQuestions.length - 1, idx + 1))}
+                        disabled={currentCodeIndex === codeQuestions.length - 1}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-[70vh]">
+                      {/* Question column */}
+                      <div className="space-y-6 overflow-y-auto max-h-[65vh] pr-2 border-r border-gray-100">
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.01]">
+                          <h3 className="font-semibold mb-3 text-blue-700 flex items-center gap-2">
+                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                            Question
+                          </h3>
+                          <div className="whitespace-pre-wrap text-gray-700">{question.text}</div>
+                        </div>
+                        {((question as any)?.description) && (
+                          <div className="bg-white p-6 rounded-xl border border-blue-100 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.01]">
+                            <h3 className="font-semibold mb-3 text-blue-700 flex items-center gap-2">
+                              <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                              Description
+                            </h3>
+                            <div className="whitespace-pre-wrap text-gray-700">{((question as any)?.description) || ''}</div>
+                          </div>
+                        )}
+                      </div>
+                      {/* Code editor + testcase column */}
+                      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.01] overflow-y-auto max-h-[65vh]">
+                        {(() => {
+                          // Extract output, testResults, score from answers if present
+                          let initialOutput = '';
+                          let initialTestResults = [];
+                          let initialScore = 0;
+                          const storedAnswer = answers[answerKey];
+                          if (storedAnswer) {
+                            try {
+                              const parsed = JSON.parse(storedAnswer);
+                              initialOutput = parsed.output || '';
+                              initialTestResults = parsed.testResults || [];
+                              initialScore = parsed.score || 0;
+                            } catch {}
+                          }
+                          return (
+                            <CodeEditor
+                              initialCode={(() => {
+                                if (storedAnswer) {
+                                  try {
+                                    const parsed = JSON.parse(storedAnswer);
+                                    return parsed.code || question.codeTemplate || '';
+                                  } catch (e) {
+                                    return question.codeTemplate || '';
+                                  }
+                                }
+                                return question.codeTemplate || '';
+                              })()}
+                              language={(question as any)?.language || 'java'}
+                              readOnly={false}
+                              question={question.text}
+                              description={(question as any)?.description || ''}
+                              testId={id}
+                              questionId={`q${originalIndex}`}
+                              initialOutput={initialOutput}
+                              initialTestResults={initialTestResults}
+                              initialScore={initialScore}
+                              onAnswerChange={(answer) => handleCodeAnswerChange(`q${originalIndex}`, answer)}
+                            />
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()
+          )}
         </div>
 
         {currentSection === 2 && validationError && (
@@ -581,6 +735,14 @@ export default function TestView() {
         }
         .animate-shake {
           animation: shake 0.5s ease-in-out;
+        }
+        .nav-animate {
+          animation: navHighlight 0.4s cubic-bezier(0.4,0,0.2,1);
+        }
+        @keyframes navHighlight {
+          0% { box-shadow: 0 0 0 0 #3b82f6; }
+          50% { box-shadow: 0 0 16px 4px #3b82f6; }
+          100% { box-shadow: 0 0 0 0 #3b82f6; }
         }
       `}</style>
     </div>
